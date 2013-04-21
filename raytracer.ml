@@ -1,5 +1,7 @@
+(*
 #use "topfind";;
 #require "Graphics";;
+*)
 
 module G = Graphics
 
@@ -37,13 +39,26 @@ let make_ray ?(origin=vzero) ~dir () =
 type sphere_t = { center : vec_t; radius : float }
 type plane_t = { normal : vec_t; anchor : vec_t }
 
-let sphere center radius = { center; radius }
+let make_sphere x y z ~r = { center=vec x y z; radius=r }
+let make_plane x y z d =
+  let normal = vnormalize (vec x y z) in
+  let anchor = ~-. d *.| normal in
+  { normal; anchor }
 
-type object_t =
+type material_t =
+  | Mirror
+  | Checkerboard of [`XY | `YZ | `XZ]
+  | Color of vec_t
+
+type shape_t =
   | Sphere of sphere_t
   | Plane of plane_t
 
-let ray_intersect_sphere r tmax s =
+type object_t = material_t * shape_t
+
+type intersection_t = (object_t * float) option
+
+let ray_intersects_sphere r s =
     (* Solve distance(r.dir*t, center') = s.radius *)
   let o = r.origin -| s.center and
       d = r.dir in
@@ -52,33 +67,73 @@ let ray_intersect_sphere r tmax s =
       c = vdot o o -. s.radius *. s.radius in
   let d = b*.b -. 4.*.a*.c in
   if d < 0. then
-    tmax
+    None
   else
     let t = (~-.b -. sqrt d)/.(2.*.a) in
-    min t tmax
+    Some t
 
-let ray_intersect_plane r tmax p =
+let ray_intersects_plane r p =
   let a = vdot (p.anchor -| r.origin) p.normal and
       b = vdot r.dir p.normal in
   if b = 0. then
-    tmax
+    None
   else
     let t = a /. b in
     if t > 0. then
-      min t tmax
+      Some t
     else
-      tmax
+      None
 
-let ray_intersect_obj r tmax = function
-  | Sphere s -> ray_intersect_sphere r tmax s
-  | Plane p -> ray_intersect_plane r tmax p
+let ray_intersect_object r (m,shape) =
+  let topt = 
+    match shape with 
+    | Sphere s -> ray_intersects_sphere s
+    | Plane p -> ray_intersects_plane p
+  in
+  match (
+    match shape with 
+    |
+  | mat, Sphere s -> ray_intersects_object
 
-let ray_intersect_objs r tmax objs =
-  List.fold_left (ray_intersect_obj r) tmax objs
+let intersection_closest i1 i2 =
+  match i1, i2 with
+  | None, None -> None
+  | None, i
+  | i, None -> i
+  | Some (_,t1), Some (_,t2) -> if t1 < t2 then i1 else i2
 
+type scene_t = {
+  objects : object_t list;
+}
+
+let scene =
+  let color_red		= Color (vec 1. 0. 0.) and
+      color_green	= Color (vec 0. 1. 0.) and
+      color_blue	= Color (vec 0. 0. 1.) and 
+      color_white	= Color vone and
+      checkerboard	= Checkerboard `XZ in
+  let sphere x y z r	= Sphere (make_sphere x y z ~r) and
+      plane nx ny nz d	= Plane (make_plane nx ny nz d) in
+  { objects = [ color_red	, sphere 10. 0. 10. 3.;
+		color_green	, sphere 10. 5. 20. 7.;
+		color_blue	, sphere 1. 0. 5. 1.;
+		color_white	, sphere 20. 3. 30. 10.;
+		checkerboard	, plane 0. 1. 0. 1. ]
+  }
+
+let scene_cast_ray { objects; _ } =
+  
+  let rec find_closest_intersection closest = function
+    | [] -> closest
+    | (mat,Sphere s) as o :: rest -> (
+      match ray_intersects_sphere s with
+      | None -> find_closes
+    )
+    | (mat,Plane p) as o :: rest -> (
+    )
+
+  
 let render ~w ~h ~set_pixel =
-  let scene = [Sphere {center={x=1.;y=0.;z=10.};radius=1.0};
-	       Plane {anchor=vec 0. 1. 0.; normal=vec 0. ~-.1. 0.}] in
   for ix = 0 to w-1 do
     for iy = 0 to h-1 do
       let screen_pos = { x = float_of_int (2*ix-w) /. float_of_int h;
