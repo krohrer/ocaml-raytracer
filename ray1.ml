@@ -1,5 +1,5 @@
 (* A simple OCaml raytracer with phong-shading, reflections and
-   shadows in around 200 lines *)
+   shadows. *)
 
 
 
