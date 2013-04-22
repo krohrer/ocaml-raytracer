@@ -42,13 +42,21 @@ type sphere_t = { center : vec_t; radius : float }
 
 let make_sphere x y z ~r = { center=vec x y z; radius=r }
 
-type material_t =
-  | Mirror
-  | Diffuse of vec_t
-  | ConstColor of vec_t
+type material_t = {
+  ambient : vec_t;
+  diffuse : vec_t;
+  specular : vec_t;
+  shininess : float;
+  reflection : float
+}
 
 type object_t = material_t * sphere_t
 type intersection_t = (object_t * float) option
+
+let ray_eval r t = r.origin +| t *.| r.dir
+
+let object_normal_on_surface (_, s) sp =
+  vnormalize (sp -| s.center)
 
 let ray_intersect_object r ((_, s) as obj) =
     (* Solve distance(r.dir*t, center') = s.radius *)
@@ -100,58 +108,82 @@ type scene_t = {
 }
 
 let scene =
-  let diffuse r g b = Diffuse (vec r g b) and
-      color r g b = ConstColor (vec r g b) and
-      diffuse_white = Diffuse vone in
+  let diffuse r g b = {
+    ambient = vzero;
+    diffuse = vec r g b;
+    specular = 0.3 *.| vone;
+    shininess = 50.;
+    reflection = 0.
+  } in
+  let mirror = {
+    ambient = vone;
+    diffuse = vzero;
+    specular = vone;
+    shininess = 100.;
+    reflection = 0.5
+  } in
+  let diffuse_white = diffuse 1. 1. 1. in
   let sphere x y z r	= make_sphere x y z ~r in
-  { ambient_color = vec 0.2 0.2 0.2;
-    lights = [ make_light 0. 100. ~-.10.       	1. 1. 1.;
-	       make_light ~-.10. 10. 2.		0.5 0.5 0.;
-	       make_light 0. 8. 8.		0. 0. 1.];
-    objects = [ diffuse_white		, sphere  4. 4. 2. 1.;
-                diffuse_white		, sphere  2. 4. 2. 1.;
-                diffuse_white		, sphere  4. 2. 2. 1.;
-                diffuse_white		, sphere  2. 2. 2. 1.;
-                diffuse_white        	, sphere  4. 4. 4. 1.;
-                diffuse_white        	, sphere  2. 4. 4. 1.;
-                diffuse_white   	, sphere  4. 2. 4. 1.;
-                diffuse_white	        , sphere  2. 2. 4. 1.;
+  {
+    ambient_color = vec 0.2 0.2 0.2;
+    lights = [
+      make_light 0. 100. ~-.100.      	1. 1. 1.;
+      make_light ~-.10. 10. 2.		0.5 0.5 0.;
+      make_light 0. 8. 8.		0. 0. 1.
+    ];
+    objects = [
+      mirror       , sphere 10. ~-.1000. 0. 999.;
+      diffuse_white		, sphere  4. 4. 2. 1.;
+      diffuse_white		, sphere  2. 4. 2. 1.;
+      diffuse_white		, sphere  4. 2. 2. 1.;
+      diffuse_white		, sphere  2. 2. 2. 1.;
+      diffuse_white        	, sphere  4. 4. 4. 1.;
+      diffuse_white        	, sphere  2. 4. 4. 1.;
+      diffuse_white   	, sphere  4. 2. 4. 1.;
+      diffuse_white	        , sphere  2. 2. 4. 1.;
                 (* diffuse 0. 1. 0.     , sphere  10. 10. 20. 10.; *)
-                Mirror                  , sphere  20. 10. 20. 20.;
-                Mirror                  , sphere  0. 0. 10. 1.;
-                (* diffuse 0. 0. 1.     , sphere  0. 0. 10. 1.; *)
-                color 1. 1. 1.          , sphere 20. 0. 10. 1.;
-                diffuse 0. 0. 0.3       , sphere 10. ~-.1000. 0. 999.
-              ];
+      mirror                  , sphere  20. 10. 20. 20.;
+      mirror                  , sphere  0. 0. 10. 1.;
+    (* diffuse 0. 0. 1.     , sphere  0. 0. 10. 1.; *)
+    ];
   }
 
 let ray_intersect_scene s r =
   List.fold_left (ray_find_min_intersection_step r) None s.objects
 
-let rec trace_ray ?(ttl=3) ray scene =
+let trace_max_depth = 10
+
+let rec trace_ray ?(depth=0) ray scene =
   match ray_intersect_scene scene ray with
-  | Some ((Diffuse dc, s), t) 
-      when ttl > 0 -> let rt = ray.origin +| t *.| ray.dir in
-		      let n = vnormalize (rt -| s.center) in
-		      let add_light_color c light =
-			let ray' = make_ray ~origin:rt ~dir:(light.position -| rt) () in
-			match ray_intersect_scene scene ray' with
-			| None -> let f = max 0. (vdot ray'.dir n) in
-				  c +| f*.|(light.color*|dc)
-			| Some _ -> (* We have an occluder *) c
-		      in
-		      List.fold_left add_light_color (scene.ambient_color *| dc) scene.lights
+  | Some ((mat, s) as obj, t) when depth < trace_max_depth ->
+    let pos = ray_eval ray t  in
+    let n = object_normal_on_surface obj pos in
+    let add_light_color c_sum light =
+      let ray' = make_ray ~origin:pos ~dir:(light.position -| pos) () in
+      if ray_intersect_scene scene ray' = None then
+	let f_diff = max 0. (vdot ray'.dir n) in
+	let f_spec = max 0. (vdot (vreflect ray'.dir n) ray.dir) in
+	let c_diff = f_diff *.| mat.diffuse *| light.color in
+	let c_spec = (f_spec ** mat.shininess) *.| mat.specular *| light.color in
+	c_sum +| c_diff +| c_spec
+      else
+	c_sum
+    in
+    let color =
+      List.fold_left
+	add_light_color
+	(mat.ambient *| scene.ambient_color)
+	scene.lights
+    in
+    let k_r = mat.reflection in
+    if k_r > 0. then
+      let dir' = vreflect ray.dir n in
+      let ray' = make_ray ~origin:pos ~dir:dir' () in
+      k_r*.|(trace_ray ~depth:(depth+1) ray' scene) +| (1.-.k_r)*.|color
+    else
+      color
 
-  | Some ((Mirror, s), t)
-      when ttl > 0 -> let rt = ray.origin +| t *.| ray.dir in
-		      let n = rt -| s.center in
-		      let dn = ((vdot ray.dir n) /. (vdot n n)) *.| n in
-		      let rdir = ray.dir -| 2.*.|dn in
-		      let ray' = make_ray ~origin:rt ~dir:rdir () in
-		      let ttl = ttl - 1 in
-		      0.3*.|scene.ambient_color +| 0.7*.|(trace_ray ~ttl:(ttl-1) ray' scene)
-
-  | Some ((ConstColor c, _), _) -> c
+  | Some ((mat, _), _) -> mat.ambient *| scene.ambient_color
 
   | _ -> vzero
 
