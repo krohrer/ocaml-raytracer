@@ -6,6 +6,7 @@ type renderer_t = w:int -> h:int -> set_pixel:set_pixel_t -> unit
 let render_and_display renderer =
   G.open_graph "";
   G.set_window_title "A simple raytracer in OCaml";
+  G.resize_window 400 300;
   ignore (G.wait_next_event [G.Key_pressed]);
   let width = G.size_x () and height = G.size_y () in
   let set_pixel ~x ~y ~r ~g ~b =

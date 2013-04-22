@@ -14,7 +14,7 @@ let ( *| ) a b	= { x = a.x *. b.x; y = a.y *. b.y; z = a.z *. b.z }
 let ( /| ) a b	= { x = a.x /. b.x; y = a.y /. b.y; z = a.z /. b.z }
 let ( *.| ) s a	= { x = s *. a.x; y = s *. a.y; z = s *. a.z }
 
-let vec x y z = { x; y; z }
+let vec x y z	= { x; y; z }
 let vone	= vec 1. 1. 1.
 let vzero	= vec 0. 0. 0.
 
