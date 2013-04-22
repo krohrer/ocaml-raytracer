@@ -1,22 +1,22 @@
 (* A simple OCaml raytracer with phong-shading, reflections and
    shadows in around 200 lines *)
 
-type vec_t = { x : float; y : float; z : float }
 
-let ( +| ) a b = { x = a.x +. b.x; y = a.y +. b.y; z = a.z +. b.z }
-let ( -| ) a b = { x = a.x -. b.x; y = a.y -. b.y; z = a.z -. b.z }
-let ( *| ) a b = { x = a.x *. b.x; y = a.y *. b.y; z = a.z *. b.z }
-let ( /| ) a b = { x = a.x /. b.x; y = a.y /. b.y; z = a.z /. b.z }
-let ( *.| ) s a = { x = s *. a.x; y = s *. a.y; z = s *. a.z }
+(* First, let us define a 3D vector in euclidean space *)
+
+type vec_t = { x : float;
+	       y : float;
+	       z : float }
+
+let ( +| ) a b	= { x = a.x +. b.x; y = a.y +. b.y; z = a.z +. b.z }
+let ( -| ) a b	= { x = a.x -. b.x; y = a.y -. b.y; z = a.z -. b.z }
+let ( *| ) a b	= { x = a.x *. b.x; y = a.y *. b.y; z = a.z *. b.z }
+let ( /| ) a b	= { x = a.x /. b.x; y = a.y /. b.y; z = a.z /. b.z }
+let ( *.| ) s a	= { x = s *. a.x; y = s *. a.y; z = s *. a.z }
 
 let vec x y z = { x; y; z }
-
-let vone  = { x = 1.; y = 1.; z = 1. }
-let vzero = { x = 0.; y = 0.; z = 0. }
-
-let vcross a b = { x = a.y *. b.z -. a.z *. b.y;
-		   y = a.z *. b.x -. a.x *. b.z;
-		   z = a.x *. b.y -. a.y *. b.x }
+let vone	= vec 1. 1. 1.
+let vzero	= vec 0. 0. 0.
 
 let vdot a b		= a.x*.b.x +. a.y*.b.y +. a.z*.b.z
 let vlen_sq a		= vdot a a
@@ -25,8 +25,13 @@ let vnormalize a	= (1./.vlen a) *.| a
 let vdist_sq a b	= vlen_sq (a -| b)
 let vdist a b		= vlen (a -| b)
 
-let vproject a b = ((vdot a b) /. (vdot b b)) *.| b
-let vreflect a n = a -| 2.*.|(vproject a n)
+let vcross a b		= { x = a.y *. b.z -. a.z *. b.y;
+			    y = a.z *. b.x -. a.x *. b.z;
+			    z = a.x *. b.y -. a.y *. b.x }
+let vproject a b	= ((vdot a b) /. (vdot b b)) *.| b
+let vreflect a n	= a -| 2.*.|(vproject a n)
+
+(* Next, a ray *)
 
 type ray_t = { origin : vec_t; dir : vec_t }
 
@@ -35,6 +40,8 @@ let make_ray ?(origin=vzero) ~dir () =
     dir = vnormalize dir }
 
 let ray_eval r t = r.origin +| t *.| r.dir
+
+(* A sphere *)
 
 type sphere_t = { center : vec_t; radius : float }
 
