@@ -397,9 +397,29 @@ let trace ray =
 
 let _ = render trace
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 (* Nice, let's add more than one light and shadows! *)
 
-
+let _ = ()
 
 
 
@@ -701,7 +721,7 @@ let rec trace_objects objs lights ?(depth=0) ray =
     let ray' = make_ray ~origin:pos ~dir:dir' () in
     if depth < max_depth then
       (* Half-half *)
-      0.5*.|(trace ~depth:(depth+1) ray') +| 0.5*.|color
+      0.5*.|(trace_objects ~depth:(depth+1) objs lights ray') +| 0.5*.|color
     else
       color
 
@@ -896,35 +916,36 @@ let rec trace_scene ?(depth=0) scene ray =
 (* Define some materials *)
 
 let mat_white	= make_material ()
-let mat_red	= make_material ~diffuse:color_red ()
-let mat_green	= make_material ~diffuse:color_green ()
-let mat_blue	= make_material ~diffuse:color_blue ()
-let mat_mirror  = make_material ~reflection:0.5 ()
+let mat_red	= make_material ~diffuse:(vec 1.0 0.2 0.5) ()
+let mat_green	= make_material ~diffuse:(vec 0.5 1.0 0.2) ()
+let mat_blue	= make_material ~diffuse:(vec 0.2 0.5 1.0) ()
+let mat_mirror  = make_material ~reflection:0.5 ~diffuse:vzero ()
 
-(* and a scene *)
+(* ...and a scene *)
 
 let scene = 
   let ambient_color = 0.2 *.| vone in
   let lights =
-    let a = ~-.10. and b = 10. in [
+    let a = ~-.3. and b = 3. and c = 20. in [
       make_light ();
-      make_light ~position:(vec a  b b) ~color:color_red ();
-      make_light ~position:(vec b  b b) ~color:color_green ();
-      make_light ~position:(vec 0. b b) ~color:color_blue ()
+      make_light ~position:(vec a  b c) ~color:color_red ();
+      make_light ~position:(vec b b c) ~color:color_green ();
+      make_light ~position:(vec 0. b c) ~color:color_blue ()
     ]
   in
   let objects =
     let a = ~-.1.5 and b = 1.5 in [
-      mat_red,		make_sphere a a 10. 2.;
-      mat_green,	make_sphere a b 10. 2.;
-      mat_blue,		make_sphere b a 10. 2.;
-      mat_white,	make_sphere b b 10. 2.;
+      mat_red,		make_sphere a a 20. 2.;
+      mat_green,	make_sphere a b 22. 2.;
+      mat_blue,		make_sphere b a 22. 2.;
+      mat_white,	make_sphere b b 20. 2.;
       mat_mirror,	make_sphere 0. ~-.1000. 0. 997.;
     ]
   in
   { ambient_color; lights; objects }
 
-(* And go! *)
+(* ... and go! *)
 
 let _ = render (trace_scene scene)
 
+ 
