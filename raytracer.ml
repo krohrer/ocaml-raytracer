@@ -1,9 +1,5 @@
-(*
-#use "topfind";;
-#require "Graphics";;
-*)
-
-module G = Graphics
+(* A simple OCaml raytracer with phong-shading, reflections and
+   shadows in around 200 lines *)
 
 type vec_t = { x : float; y : float; z : float }
 
@@ -22,12 +18,12 @@ let vcross a b = { x = a.y *. b.z -. a.z *. b.y;
 		   y = a.z *. b.x -. a.x *. b.z;
 		   z = a.x *. b.y -. a.y *. b.x }
 
-let vdot a b = a.x*.b.x +. a.y*.b.y +. a.z*.b.z
-let vlen_sq a = vdot a a
-let vlen a = sqrt (vlen_sq a)
-let vnormalize a = (1./.vlen a) *.| a
-let vdist_sq a b = vlen_sq (a -| b)
-let vdist a b = vlen (a -| b)
+let vdot a b		= a.x*.b.x +. a.y*.b.y +. a.z*.b.z
+let vlen_sq a		= vdot a a
+let vlen a		= sqrt (vlen_sq a)
+let vnormalize a	= (1./.vlen a) *.| a
+let vdist_sq a b	= vlen_sq (a -| b)
+let vdist a b		= vlen (a -| b)
 
 let vproject a b = ((vdot a b) /. (vdot b b)) *.| b
 let vreflect a n = a -| 2.*.|(vproject a n)
@@ -37,6 +33,8 @@ type ray_t = { origin : vec_t; dir : vec_t }
 let make_ray ?(origin=vzero) ~dir () =
   { origin;
     dir = vnormalize dir }
+
+let ray_eval r t = r.origin +| t *.| r.dir
 
 type sphere_t = { center : vec_t; radius : float }
 
@@ -52,8 +50,6 @@ type material_t = {
 
 type object_t = material_t * sphere_t
 type intersection_t = (object_t * float) option
-
-let ray_eval r t = r.origin +| t *.| r.dir
 
 let object_normal_on_surface (_, s) sp =
   vnormalize (sp -| s.center)
@@ -107,6 +103,45 @@ type scene_t = {
   objects : object_t list;
 }
 
+let ray_intersect_scene s r =
+  List.fold_left (ray_find_min_intersection_step r) None s.objects
+
+let trace_max_depth = 10
+
+let rec trace_ray ?(depth=0) scene ray =
+  match ray_intersect_scene scene ray with
+  | Some ((mat, s) as obj, t) when depth < trace_max_depth ->
+    let pos = ray_eval ray t  in
+    let n = object_normal_on_surface obj pos in
+    let add_light c_sum light =
+      let ray' = make_ray ~origin:pos ~dir:(light.position -| pos) () in
+      if ray_intersect_scene scene ray' = None then
+	let f_diff = max 0. (vdot ray'.dir n) in
+	let f_spec = max 0. (vdot (vreflect ray'.dir n) ray.dir) in
+	let c_diff = f_diff *.| mat.diffuse *| light.color in
+	let c_spec = (f_spec ** mat.shininess) *.| mat.specular *| light.color in
+	c_sum +| c_diff +| c_spec
+      else
+	c_sum
+    in
+    let color =
+      List.fold_left
+	add_light
+	(mat.ambient *| scene.ambient_color)
+	scene.lights
+    in
+    let k_r = mat.reflection in
+    if k_r > 0. then
+      let dir' = vreflect ray.dir n in
+      let ray' = make_ray ~origin:pos ~dir:dir' () in
+      k_r*.|(trace_ray ~depth:(depth+1) scene ray') +| (1.-.k_r)*.|color
+    else
+      color
+
+  | Some ((mat, _), _) -> mat.ambient *| scene.ambient_color
+
+  | _ -> vzero
+
 let scene =
   let diffuse r g b = {
     ambient = vzero;
@@ -139,55 +174,16 @@ let scene =
       diffuse_white		, sphere  2. 2. 2. 1.;
       diffuse_white        	, sphere  4. 4. 4. 1.;
       diffuse_white        	, sphere  2. 4. 4. 1.;
-      diffuse_white   	, sphere  4. 2. 4. 1.;
+      diffuse_white	   	, sphere  4. 2. 4. 1.;
       diffuse_white	        , sphere  2. 2. 4. 1.;
-                (* diffuse 0. 1. 0.     , sphere  10. 10. 20. 10.; *)
+      (* diffuse 0. 1. 0.     , sphere  10. 10. 20. 10.; *)
       mirror                  , sphere  20. 10. 20. 20.;
       mirror                  , sphere  0. 0. 10. 1.;
     (* diffuse 0. 0. 1.     , sphere  0. 0. 10. 1.; *)
     ];
   }
 
-let ray_intersect_scene s r =
-  List.fold_left (ray_find_min_intersection_step r) None s.objects
-
-let trace_max_depth = 10
-
-let rec trace_ray ?(depth=0) ray scene =
-  match ray_intersect_scene scene ray with
-  | Some ((mat, s) as obj, t) when depth < trace_max_depth ->
-    let pos = ray_eval ray t  in
-    let n = object_normal_on_surface obj pos in
-    let add_light_color c_sum light =
-      let ray' = make_ray ~origin:pos ~dir:(light.position -| pos) () in
-      if ray_intersect_scene scene ray' = None then
-	let f_diff = max 0. (vdot ray'.dir n) in
-	let f_spec = max 0. (vdot (vreflect ray'.dir n) ray.dir) in
-	let c_diff = f_diff *.| mat.diffuse *| light.color in
-	let c_spec = (f_spec ** mat.shininess) *.| mat.specular *| light.color in
-	c_sum +| c_diff +| c_spec
-      else
-	c_sum
-    in
-    let color =
-      List.fold_left
-	add_light_color
-	(mat.ambient *| scene.ambient_color)
-	scene.lights
-    in
-    let k_r = mat.reflection in
-    if k_r > 0. then
-      let dir' = vreflect ray.dir n in
-      let ray' = make_ray ~origin:pos ~dir:dir' () in
-      k_r*.|(trace_ray ~depth:(depth+1) ray' scene) +| (1.-.k_r)*.|color
-    else
-      color
-
-  | Some ((mat, _), _) -> mat.ambient *| scene.ambient_color
-
-  | _ -> vzero
-
-let render ~w ~h ~set_pixel =
+let driver ~w ~h ~set_pixel ~tracer =
   let origin = vec 0. 0. ~-.12. in
   for ix = 0 to w-1 do
     for iy = 0 to h-1 do
@@ -198,26 +194,9 @@ let render ~w ~h ~set_pixel =
       let dir = screen_pos -| origin in
       let ray = make_ray ~origin ~dir () in
 
-      set_pixel ix iy (trace_ray ray scene)
+      let color = tracer ray in
+      set_pixel ~x:ix ~y:iy ~r:color.x ~g:color.y ~b:color.z
     done
   done
 
-let _ =
-  G.open_graph "";
-  G.set_window_title "A simple raytracer in OCaml";
-  ignore (G.wait_next_event [G.Key_pressed]);
-  let width = G.size_x () and height = G.size_y () in
-  let color_from_vec { x; y; z } =
-    let r = int_of_float (255. *. x) and
-	g = int_of_float (255. *. y) and
-	b = int_of_float (255. *. z) in
-    G.rgb (min r 255) (min g 255) (min b 255)
-  in
-  let set_pixel x y color_vec =
-    G.set_color (color_from_vec color_vec);
-    G.plot x y
-  in
-  render ~w:width ~h:height ~set_pixel;
-  ignore (G.wait_next_event [G.Key_pressed]);
-  G.close_graph ()
-
+let _ = Win.render_and_display (driver ~tracer:(trace_ray scene))
