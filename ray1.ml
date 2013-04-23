@@ -88,7 +88,7 @@ let ray_eval r t = r.origin +| t *.| r.dir
 type sphere_t = { center : vec_t;
 		  radius : float }
 
-let make_sphere x y z ~r = { center=vec x y z; radius=r }
+let make_sphere x y z r = { center=vec x y z; radius=r }
 
 
 
@@ -128,13 +128,13 @@ let object_normal_on_surface (_, s) sp =
   vnormalize (sp -| s.center)
 
 
-(* Object / sphere intersection *)
+(* Object / sphere intersection
 
+   Solve quadratic equation:
+
+   distance(r.dir*t, center') = s.radius
+*)
 let ray_intersect_object r ((_, s) as obj) =
-  (* Solve quadratic equation:
-
-     distance(r.dir*t, center') = s.radius
-  *)
   let o = r.origin -| s.center and
       d = r.dir in
   let a = vdot d d and
@@ -717,10 +717,10 @@ let rec trace_objects objs lights ?(depth=0) ray =
 	c_sum +| f*.|color*|light.color
     in
     let color = List.fold_left add_light color_black lights in
-    let dir' = vreflect ray.dir n in
-    let ray' = make_ray ~origin:pos ~dir:dir' () in
     if depth < max_depth then
       (* Half-half *)
+      let dir' = vreflect ray.dir n in
+      let ray' = make_ray ~origin:pos ~dir:dir' () in
       0.5*.|(trace_objects ~depth:(depth+1) objs lights ray') +| 0.5*.|color
     else
       color
@@ -823,7 +823,7 @@ let make_material
     ?(diffuse=vone)
     ?(specular=0.3*.|vone)
     ?(shininess=50.)
-   ?(reflection=0.)
+    ?(reflection=0.)
     () =
   { ambient; diffuse; specular; shininess; reflection }
 
@@ -947,5 +947,74 @@ let scene =
 (* ... and go! *)
 
 let _ = render (trace_scene scene)
+ 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+(* Bonus materials *)
+
+let mat_white	= make_material ()
+let mat_red	= make_material ~diffuse:(vec 1.0 0.2 0.5) ()
+let mat_green	= make_material ~diffuse:(vec 0.5 1.0 0.2) ()
+let mat_blue	= make_material ~diffuse:(vec 0.2 0.5 1.0) ()
+let mat_mirror  = make_material ~reflection:0.5 ~diffuse:vzero ()
+
+(* Bonus scene *)
+
+let scene = 
+  let ambient_color = vec 0.3 0.2 0.2 in
+  let lights =
+    let a = ~-.30. and b = 30. and c = 20. in [
+      make_light ();
+      make_light ~position:(vec a  b c) ~color:color_red ();
+      make_light ~position:(vec b b c) ~color:color_green ();
+      make_light ~position:(vec 0. b c) ~color:color_blue ()
+    ]
+  in
+  let objects =
+    let z = 60. and a = ~-.1.5 and b = 1.5 in [
+      mat_red,		
+      make_sphere 0. 4. z 4.;
+      mat_green,	
+      make_sphere 0. 11. z 3.5;
+      mat_blue,		
+      make_sphere 0. 17. z 3.;
+      mat_white,	
+      make_sphere 0. 22. z 2.5;
+      mat_mirror, 
+      make_sphere 0. ~-.1000. 0. 997.;
+      mat_white,
+      make_sphere 0. ~-.30. z 30.5;
+      mat_white,
+      make_sphere 20. ~-.17. z 20.5;
+    ]
+  in
+  { ambient_color; lights; objects }
+
+let _ = render (trace_scene scene)
  
